@@ -1,0 +1,80 @@
+name: 'Build and Deploy to GKE'
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - 'microservices/**'
+      - 'k8s/**'
+
+env:
+  PROJECT_ID: ${{ secrets.GCP_PROJECT_ID }}
+  GKE_CLUSTER: <clusrer name>
+  GKE_REGION: <region name>
+  REGISTRY_HOSTNAME: gcr.io
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  setup-build-publish-deploy:
+    name: Setup, Build, Publish, and Deploy
+    runs-on: ubuntu-latest
+
+    strategy:
+      matrix:
+        service:
+          - name: patient-service
+            port: 3000
+            type: node
+          - name: appointment-service
+            port: 3001
+            type: node
+          - name: order-service
+            port: 8080
+            type: java
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ secrets.WIF_PROVIDER }}
+          service_account: ${{ secrets.WIF_SERVICE_ACCOUNT }}
+
+      - name: Set up Cloud SDK
+        uses: google-github-actions/setup-gcloud@v2
+
+      - name: Configure Docker for GCR
+        run: gcloud auth configure-docker
+
+      - name: Build Docker image
+        run: |
+          docker build \
+            -t $REGISTRY_HOSTNAME/$PROJECT_ID/'LOCATION-docker.pkg.dev/PROJECT_ID/REPOSITORY/IMAGE_NAME', '.' \
+
+
+      - name: Publish to GCR
+        run: |
+          docker push $REGISTRY_HOSTNAME/$PROJECT_ID/'LOCATION-docker.pkg.dev/PROJECT_ID/REPOSITORY/IMAGE_NAME', '.':latest
+
+      - name: Get GKE credentials
+        uses: google-github-actions/get-gke-credentials@v2
+        with:
+          cluster_name: ${{ env.GKE_CLUSTER }}
+          location: ${{ env.GKE_REGION }}
+
+      - name: Deploy to GKE
+        run: |
+            ./microservices/'LOCATION-docker.pkg.dev/PROJECT_ID/REPOSITORY/IMAGE_NAME', '.'/k8s/deployment.yaml
+          
+          kubectl apply -f ./microservices/'LOCATION-docker.pkg.dev/PROJECT_ID/REPOSITORY/IMAGE_NAME', '.'/k8s/
+
+      - name: Verify deployment
+        run: |
+          kubectl rollout status deployment/'LOCATION-docker.pkg.dev/PROJECT_ID/REPOSITORY/IMAGE_NAME', '.' -n default
+          kubectl get services -n default
