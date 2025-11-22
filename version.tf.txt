@@ -1,0 +1,17 @@
+terraform {
+  required_version = ">= 1.4.0"
+  backend "gcs" {
+    bucket  = var.gcs_state_bucket
+    prefix  = var.gcs_state_prefix
+  }
+}
+
+provider "google" {
+  project = var.project_id
+  region  = var.region
+}
+
+provider "google-beta" {
+  project = var.project_id
+  region  = var.region
+}
